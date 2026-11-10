@@ -30,9 +30,10 @@ import { useToast } from './Toast';
 interface AdminModalProps {
   isOpen: boolean;
   onClose: () => void;
+  currentUser?: { id: string; role?: string; email?: string } | null;
 }
 
-export const AdminModal: React.FC<AdminModalProps> = ({ isOpen, onClose }) => {
+export const AdminModal: React.FC<AdminModalProps> = ({ isOpen, onClose, currentUser }) => {
   const toast = useToast();
   const [activeTab, setActiveTab] = useState<'USERS' | 'OVERVIEW'>('USERS');
   const [stats, setStats] = useState<AdminStats | null>(null);
@@ -561,26 +562,47 @@ export const AdminModal: React.FC<AdminModalProps> = ({ isOpen, onClose }) => {
                                 <span>Sửa</span>
                               </button>
 
-                              <button
-                                type="button"
-                                onClick={() => setDeletingUser(u)}
-                                title="Xóa tài khoản người dùng"
-                                style={{
-                                  padding: '0.4rem 0.65rem',
-                                  borderRadius: '6px',
-                                  background: 'rgba(239, 68, 68, 0.12)',
-                                  border: '1px solid rgba(239, 68, 68, 0.3)',
-                                  color: '#f87171',
-                                  cursor: 'pointer',
-                                  display: 'flex',
-                                  alignItems: 'center',
-                                  gap: '0.3rem',
-                                  fontSize: '0.78rem',
-                                }}
-                              >
-                                <Trash2 size={13} />
-                                <span>Xóa</span>
-                              </button>
+                              {(() => {
+                                const adminCount = users.filter((item) => item.role === 'ADMIN').length;
+                                const isSelf = currentUser?.id === u.id;
+                                const isSoleAdmin = u.role === 'ADMIN' && adminCount <= 1;
+                                const isDeleteLocked = isSelf || isSoleAdmin;
+                                const deleteTooltip = isSelf && isSoleAdmin
+                                  ? 'Không thể xóa chính mình vì bạn là Quản trị viên duy nhất của hệ thống'
+                                  : isSelf
+                                  ? 'Bạn không thể tự xóa tài khoản của chính mình trong phiên quản trị'
+                                  : isSoleAdmin
+                                  ? 'Hệ thống chỉ còn 1 Quản trị viên duy nhất, không thể xóa'
+                                  : 'Xóa tài khoản người dùng';
+
+                                return (
+                                  <button
+                                    type="button"
+                                    disabled={isDeleteLocked}
+                                    onClick={() => {
+                                      if (isDeleteLocked) return;
+                                      setDeletingUser(u);
+                                    }}
+                                    title={deleteTooltip}
+                                    style={{
+                                      padding: '0.4rem 0.65rem',
+                                      borderRadius: '6px',
+                                      background: isDeleteLocked ? 'rgba(148, 163, 184, 0.08)' : 'rgba(239, 68, 68, 0.12)',
+                                      border: isDeleteLocked ? '1px solid rgba(148, 163, 184, 0.2)' : '1px solid rgba(239, 68, 68, 0.3)',
+                                      color: isDeleteLocked ? '#94a3b8' : '#f87171',
+                                      cursor: isDeleteLocked ? 'not-allowed' : 'pointer',
+                                      opacity: isDeleteLocked ? 0.5 : 1,
+                                      display: 'flex',
+                                      alignItems: 'center',
+                                      gap: '0.3rem',
+                                      fontSize: '0.78rem',
+                                    }}
+                                  >
+                                    {isDeleteLocked ? <Lock size={13} /> : <Trash2 size={13} />}
+                                    <span>{isDeleteLocked ? 'Khóa' : 'Xóa'}</span>
+                                  </button>
+                                );
+                              })()}
                             </div>
                           </td>
                         </tr>
@@ -823,23 +845,39 @@ export const AdminModal: React.FC<AdminModalProps> = ({ isOpen, onClose }) => {
                 <label style={{ display: 'block', fontSize: '0.8rem', color: '#94a3b8', marginBottom: '0.35rem' }}>
                   Phân quyền
                 </label>
-                <select
-                  value={editRole}
-                  onChange={(e: any) => setEditRole(e.target.value)}
-                  style={{
-                    width: '100%',
-                    padding: '0.65rem 0.85rem',
-                    borderRadius: '8px',
-                    fontSize: '0.88rem',
-                    background: 'rgba(16, 36, 26, 0.75)',
-                    border: '1px solid rgba(52, 211, 153, 0.3)',
-                    color: '#ffffff',
-                    outline: 'none',
-                  }}
-                >
-                  <option value="MEMBER">Thành viên thông thường (MEMBER)</option>
-                  <option value="ADMIN">Quản trị viên toàn hệ thống (ADMIN)</option>
-                </select>
+                {(() => {
+                  const adminCount = users.filter((item) => item.role === 'ADMIN').length;
+                  const isRoleLocked = editingUser.role === 'ADMIN' && adminCount <= 1;
+
+                  return (
+                    <>
+                      <select
+                        value={editRole}
+                        onChange={(e: any) => setEditRole(e.target.value)}
+                        disabled={isRoleLocked}
+                        style={{
+                          width: '100%',
+                          padding: '0.65rem 0.85rem',
+                          borderRadius: '8px',
+                          fontSize: '0.88rem',
+                          background: isRoleLocked ? 'rgba(16, 36, 26, 0.4)' : 'rgba(16, 36, 26, 0.75)',
+                          border: '1px solid rgba(52, 211, 153, 0.3)',
+                          color: isRoleLocked ? '#94a3b8' : '#ffffff',
+                          outline: 'none',
+                          cursor: isRoleLocked ? 'not-allowed' : 'pointer',
+                        }}
+                      >
+                        <option value="MEMBER">Thành viên thông thường (MEMBER)</option>
+                        <option value="ADMIN">Quản trị viên toàn hệ thống (ADMIN)</option>
+                      </select>
+                      {isRoleLocked && (
+                        <p style={{ margin: '0.4rem 0 0 0', fontSize: '0.75rem', color: '#fbbf24' }}>
+                          ⚠️ Đây là Quản trị viên duy nhất trong hệ thống, không thể hạ quyền.
+                        </p>
+                      )}
+                    </>
+                  );
+                })()}
               </div>
 
               <div style={{ marginBottom: '1.4rem' }}>

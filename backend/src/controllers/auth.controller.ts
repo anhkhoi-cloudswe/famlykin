@@ -705,6 +705,18 @@ export const closeAccount = async (req: AuthRequest, res: Response) => {
       return res.status(404).json({ error: 'Không tìm thấy người dùng.' });
     }
 
+    // Kiểm tra nếu là ADMIN và là admin duy nhất thì không cho phép tự đóng/xóa tài khoản của mình
+    if (user.role === 'ADMIN') {
+      const adminCount = await prisma.user.count({
+        where: { role: 'ADMIN', status: { not: 'PENDING_DELETE' } },
+      });
+      if (adminCount <= 1) {
+        return res.status(400).json({
+          error: 'Hệ thống chỉ còn duy nhất một Quản trị viên (ADMIN). Bạn không thể tự đóng hoặc xóa tài khoản này để đảm bảo an toàn vận hành!',
+        });
+      }
+    }
+
     const deletedAt = new Date();
     await prisma.user.update({
       where: { id: userId },

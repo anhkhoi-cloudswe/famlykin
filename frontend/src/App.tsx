@@ -1284,6 +1284,7 @@ const AppContent: React.FC = () => {
             activeTab={adminActiveTab}
             onTabChange={setAdminActiveTab}
             onLogout={handleLogout}
+            currentUser={user}
           />
         ) : mainView === 'BRANCHES' ? (
           <BranchesHubView
@@ -1535,7 +1536,7 @@ const AppContent: React.FC = () => {
       <HelpModal isOpen={showHelpModal} onClose={() => setShowHelpModal(false)} />
 
       {/* Admin Management Dashboard Modal */}
-      <AdminModal isOpen={showAdminModal} onClose={() => setShowAdminModal(false)} />
+      <AdminModal isOpen={showAdminModal} onClose={() => setShowAdminModal(false)} currentUser={user} />
 
       {/* Family Flashcard Quiz Modal */}
       {showFlashcardModal && tree && (

@@ -56,6 +56,7 @@ interface AdminDashboardProps {
   activeTab: AdminTab;
   onTabChange: (tab: AdminTab) => void;
   onLogout: () => void;
+  currentUser?: { id: string; role?: string; email?: string } | null;
 }
 
 interface AuditLogItem {
@@ -71,6 +72,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   activeTab,
   onTabChange,
   onLogout,
+  currentUser,
 }) => {
   const toast = useToast();
 
@@ -96,7 +98,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     return `${phone.slice(0, 3)}••••${phone.slice(-3)}`;
   };
 
-  // User Filter & Search
+  // Count total admins to enforce safety rules
+  const adminCount = users.filter((u) => u.role === 'ADMIN').length;
   const [userSearchTerm, setUserSearchTerm] = useState('');
   const [userRoleFilter, setUserRoleFilter] = useState<'ALL' | 'ADMIN' | 'MEMBER'>('ALL');
 
@@ -618,15 +621,46 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                             <Edit2 size={15} />
                             <span>Sửa</span>
                           </button>
-                          <button
-                            type="button"
-                            className="btn-action-delete"
-                            title="Xóa tài khoản này"
-                            onClick={() => setDeletingUser(u)}
-                          >
-                            <Trash2 size={15} />
-                            <span>Xóa</span>
-                          </button>
+                          {(() => {
+                            const isSelf = currentUser?.id === u.id;
+                            const isSoleAdmin = u.role === 'ADMIN' && adminCount <= 1;
+                            const isDeleteLocked = isSelf || isSoleAdmin;
+                            const deleteTooltip = isSelf && isSoleAdmin
+                              ? 'Không thể xóa chính mình vì bạn là Quản trị viên duy nhất của hệ thống'
+                              : isSelf
+                              ? 'Bạn không thể tự xóa tài khoản của chính mình trong phiên quản trị'
+                              : isSoleAdmin
+                              ? 'Hệ thống chỉ còn 1 Quản trị viên duy nhất, không thể xóa'
+                              : 'Xóa tài khoản này';
+
+                            return (
+                              <button
+                                type="button"
+                                className="btn-action-delete"
+                                disabled={isDeleteLocked}
+                                style={
+                                  isDeleteLocked
+                                    ? {
+                                        opacity: 0.45,
+                                        cursor: 'not-allowed',
+                                        filter: 'grayscale(0.6)',
+                                        borderColor: 'rgba(148, 163, 184, 0.2)',
+                                        color: '#94a3b8',
+                                        background: 'rgba(148, 163, 184, 0.08)',
+                                      }
+                                    : undefined
+                                }
+                                title={deleteTooltip}
+                                onClick={() => {
+                                  if (isDeleteLocked) return;
+                                  setDeletingUser(u);
+                                }}
+                              >
+                                {isDeleteLocked ? <Lock size={14} /> : <Trash2 size={15} />}
+                                <span>{isDeleteLocked ? 'Đã Khóa' : 'Xóa'}</span>
+                              </button>
+                            );
+                          })()}
                         </div>
                       </td>
                     </tr>
@@ -1386,10 +1420,16 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   value={editRole}
                   onChange={(e) => setEditRole(e.target.value as 'MEMBER' | 'ADMIN')}
                   className="submodal-select"
+                  disabled={editingUser.role === 'ADMIN' && adminCount <= 1}
                 >
                   <option value="MEMBER">Thành Viên Thường (MEMBER)</option>
                   <option value="ADMIN">Quản Trị Viên (ADMIN)</option>
                 </select>
+                {editingUser.role === 'ADMIN' && adminCount <= 1 && (
+                  <p className="text-[11px] text-amber-400 mt-1">
+                    ⚠️ Đây là Quản trị viên duy nhất trong hệ thống, không thể hạ quyền.
+                  </p>
+                )}
               </div>
 
               <div className="submodal-actions">
