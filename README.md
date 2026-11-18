@@ -1,9 +1,6 @@
 # Famlykin — Digital Family Tree for Vietnamese Families
 
-<p align="center">
-  <a href="README_VI.md"><img src="https://img.shields.io/badge/Tiếng_Vietnamese-0078D7?style=flat&logo=googletranslate&logoColor=white" alt="Tiếng Việt"></a>
-  <a href="README.md"><img src="https://img.shields.io/badge/English-25D366?style=flat&logo=whatsapp&logoColor=white" alt="English"></a>
-</p>
+**[Tiếng Việt](README_VI.md)** • English
 
 <p align="center">
   <img src="frontend/public/images/Famlykin_Thumbnail_EN.png" alt="Famlykin - Digital Family Tree for Vietnamese Families" width="900">
