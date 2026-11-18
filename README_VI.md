@@ -1,6 +1,9 @@
 # Famlykin — Cây gia phả số cho gia đình Việt
 
-**English** • [Tiếng Việt](README_VI.md)
+<p align="center">
+  <a href="README_VI.md"><img src="https://img.shields.io/badge/Tiếng_Việt-0078D7?style=flat&logo=googletranslate&logoColor=white" alt="Tiếng Việt"></a>
+  <a href="README.md"><img src="https://img.shields.io/badge/English-25D366?style=flat&logo=whatsapp&logoColor=white" alt="English"></a>
+</p>
 
 <p align="center">
   <img src="frontend/public/images/Famlykin_Thumbnail.png" alt="Famlykin - cây gia phả số cho gia đình Việt" width="900">
