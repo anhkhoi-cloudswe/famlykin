@@ -18,6 +18,8 @@ import subscriptionRoutes from './routes/subscription.routes';
 import { cleanupPendingDeleteAccounts } from './controllers/auth.controller';
 import { initWebSocketServer } from './services/websocket.service';
 
+import { isAllowedOrigin } from './utils/cors';
+
 dotenv.config();
 
 const app = express();
@@ -30,11 +32,17 @@ app.use(
   })
 );
 
-// 2. CORS an toàn
+// 2. CORS an toàn: chỉ cho phép các domain hợp lệ thay vì phản chiếu mọi Origin
 app.use(
   cors({
-    origin: true,
-    credentials: true, // Hỗ trợ gửi cookie an toàn qua trình duyệt
+    origin: (origin, callback) => {
+      // Cho phép request không có Origin (curl, health check, server-to-server webhook)
+      if (!origin || isAllowedOrigin(origin)) {
+        return callback(null, true);
+      }
+      return callback(new Error('Origin không được phép bởi chính sách CORS.'));
+    },
+    credentials: true, // Hỗ trợ gửi cookie/credentials an toàn qua trình duyệt
   })
 );
 

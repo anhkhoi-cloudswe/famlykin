@@ -2,6 +2,7 @@ import http from 'http';
 import { handleAsNodeRequest } from 'cloudflare:node';
 import app from './index';
 import { setWorkerEnv } from './services/email.service';
+import { buildCorsHeaders } from './utils/cors';
 
 let server: http.Server | null = null;
 let serverPort = 8080;
@@ -36,17 +37,12 @@ export default {
     }
 
     // Xử lý CORS Preflight an toàn ở cấp Worker
+    const origin = request.headers.get('Origin');
     if (request.method === 'OPTIONS') {
-      const origin = request.headers.get('Origin') || '*';
+      const corsHeaders = buildCorsHeaders(origin);
       return new Response(null, {
-        status: 204,
-        headers: {
-          'Access-Control-Allow-Origin': origin,
-          'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, PATCH, OPTIONS',
-          'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Requested-With',
-          'Access-Control-Allow-Credentials': 'true',
-          'Access-Control-Max-Age': '86400',
-        },
+        status: Object.keys(corsHeaders).length > 0 ? 204 : 403,
+        headers: corsHeaders,
       });
     }
 
@@ -57,17 +53,14 @@ export default {
       return response;
     } catch (err: any) {
       console.error('[Cloudflare Worker Error]:', err);
-      const origin = request.headers.get('Origin') || '*';
       return new Response(
         JSON.stringify({ error: err?.message || 'Đã xảy ra lỗi máy chủ nội bộ.' }),
         {
           status: 500,
           headers: {
             'Content-Type': 'application/json',
-            'Access-Control-Allow-Origin': origin,
-            'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, PATCH, OPTIONS',
-            'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Requested-With',
-            'Access-Control-Allow-Credentials': 'true',
+            'X-Content-Type-Options': 'nosniff',
+            ...buildCorsHeaders(origin),
           },
         }
       );
