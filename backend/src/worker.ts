@@ -3,6 +3,7 @@ import { handleAsNodeRequest } from 'cloudflare:node';
 import app from './index';
 import { setWorkerEnv } from './services/email.service';
 import { buildCorsHeaders } from './utils/cors';
+import { createPrismaInstance } from './prisma';
 
 let server: http.Server | null = null;
 let serverPort = 8080;
@@ -64,6 +65,29 @@ export default {
           },
         }
       );
+    }
+  },
+
+  // Cron Trigger giữ kết nối Supabase không bị pause (chạy mỗi 3 ngày lúc 03:00 UTC)
+  async scheduled(_controller: ScheduledController, env: any, _ctx: ExecutionContext): Promise<void> {
+    const connectionString = env.DATABASE_URL;
+    if (!connectionString) {
+      throw new Error('[KeepAlive] Thiếu biến môi trường DATABASE_URL trên Cloudflare Worker.');
+    }
+
+    const { prisma, cleanup } = createPrismaInstance(connectionString);
+    try {
+      await prisma.$queryRaw`SELECT 1`;
+      console.log(`[KeepAlive] Ping Supabase thành công lúc ${new Date().toISOString()}`);
+    } catch (err) {
+      console.error('[KeepAlive] Ping Supabase thất bại:', err);
+      throw err; // Để Cloudflare Workers đánh dấu cron run là Failed trên Dashboard
+    } finally {
+      try {
+        await cleanup();
+      } catch (cleanupErr) {
+        console.warn('[KeepAlive] Lỗi khi đóng kết nối cleanup:', cleanupErr);
+      }
     }
   },
 };
