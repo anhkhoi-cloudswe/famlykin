@@ -76,11 +76,58 @@ export default {
     }
 
     const { prisma, cleanup } = createPrismaInstance(connectionString);
+    const startedAt = Date.now();
     try {
       await prisma.$queryRaw`SELECT 1`;
-      console.log(`[KeepAlive] Ping Supabase thành công lúc ${new Date().toISOString()}`);
-    } catch (err) {
+      const latencyMs = Date.now() - startedAt;
+      await prisma.systemHeartbeat.upsert({
+        where: { id: 'supabase-keepalive' },
+        update: {
+          status: 'OK',
+          lastSource: 'CRON',
+          lastRunAt: new Date(),
+          latencyMs,
+          errorMessage: null,
+          totalRuns: { increment: 1 },
+        },
+        create: {
+          id: 'supabase-keepalive',
+          status: 'OK',
+          lastSource: 'CRON',
+          lastRunAt: new Date(),
+          latencyMs,
+          errorMessage: null,
+          totalRuns: 1,
+        },
+      });
+      console.log(`[KeepAlive] Ping Supabase thành công lúc ${new Date().toISOString()} (${latencyMs}ms)`);
+    } catch (err: any) {
+      const latencyMs = Date.now() - startedAt;
       console.error('[KeepAlive] Ping Supabase thất bại:', err);
+      try {
+        await prisma.systemHeartbeat.upsert({
+          where: { id: 'supabase-keepalive' },
+          update: {
+            status: 'ERROR',
+            lastSource: 'CRON',
+            lastRunAt: new Date(),
+            latencyMs,
+            errorMessage: String(err?.message || err).slice(0, 500),
+            totalRuns: { increment: 1 },
+          },
+          create: {
+            id: 'supabase-keepalive',
+            status: 'ERROR',
+            lastSource: 'CRON',
+            lastRunAt: new Date(),
+            latencyMs,
+            errorMessage: String(err?.message || err).slice(0, 500),
+            totalRuns: 1,
+          },
+        });
+      } catch (recordErr) {
+        console.warn('[KeepAlive] Không thể ghi trạng thái lỗi vào SystemHeartbeat:', recordErr);
+      }
       throw err; // Để Cloudflare Workers đánh dấu cron run là Failed trên Dashboard
     } finally {
       try {

@@ -292,3 +292,104 @@ export const updateAdminUserSubscription = async (req: AuthRequest, res: Respons
     return res.status(500).json({ error: error?.message || 'Không thể cập nhật gói hội viên.' });
   }
 };
+
+const KEEPALIVE_CRON = '0 3 */3 * *';
+
+async function collectDatabaseHealthPayload() {
+  const startedAt = Date.now();
+  await prisma.$queryRaw`SELECT 1`;
+  const liveLatencyMs = Date.now() - startedAt;
+
+  let dbSizeBytes: number | null = null;
+  let pgVersion: string | null = null;
+  try {
+    const sizeRows: Array<{ size_bytes: bigint | number }> = await prisma.$queryRaw`
+      SELECT pg_database_size(current_database()) AS size_bytes
+    `;
+    if (sizeRows?.[0]?.size_bytes !== undefined && sizeRows[0].size_bytes !== null) {
+      dbSizeBytes = Number(sizeRows[0].size_bytes);
+    }
+    const versionRows: Array<{ version: string }> = await prisma.$queryRaw`SELECT version() AS version`;
+    if (versionRows?.[0]?.version) {
+      pgVersion = String(versionRows[0].version).split(',')[0];
+    }
+  } catch (metaErr) {
+    console.warn('[AdminDBHealth] Không thể đọc metadata pg_database_size/version:', metaErr);
+  }
+
+  const heartbeat = await prisma.systemHeartbeat
+    .findUnique({ where: { id: 'supabase-keepalive' } })
+    .catch(() => null);
+
+  const healthStatus: 'HEALTHY' | 'DEGRADED' | 'ERROR' =
+    heartbeat?.status === 'ERROR' || liveLatencyMs > 1500 ? 'DEGRADED' : 'HEALTHY';
+
+  return {
+    status: healthStatus,
+    liveLatencyMs,
+    dbSizeBytes,
+    dbSizeMB: dbSizeBytes !== null ? Number((dbSizeBytes / (1024 * 1024)).toFixed(2)) : null,
+    pgVersion,
+    cronExpression: KEEPALIVE_CRON,
+    cronDescription: 'Mỗi 3 ngày lúc 03:00 UTC (10:00 giờ VN)',
+    heartbeat,
+    checkedAt: new Date().toISOString(),
+  };
+}
+
+export const getAdminDatabaseHealth = async (_req: AuthRequest, res: Response) => {
+  try {
+    const payload = await collectDatabaseHealthPayload();
+    return res.json(payload);
+  } catch (error: any) {
+    console.error('Lỗi kiểm tra sức khỏe database:', error);
+    return res.status(500).json({
+      status: 'ERROR',
+      error: error?.message || 'Không thể kết nối tới Supabase PostgreSQL.',
+      cronExpression: KEEPALIVE_CRON,
+      cronDescription: 'Mỗi 3 ngày lúc 03:00 UTC (10:00 giờ VN)',
+      checkedAt: new Date().toISOString(),
+    });
+  }
+};
+
+export const triggerAdminDatabasePing = async (_req: AuthRequest, res: Response) => {
+  const startedAt = Date.now();
+  try {
+    await prisma.$queryRaw`SELECT 1`;
+    const latencyMs = Date.now() - startedAt;
+
+    await prisma.systemHeartbeat.upsert({
+      where: { id: 'supabase-keepalive' },
+      update: {
+        status: 'OK',
+        lastSource: 'MANUAL',
+        lastRunAt: new Date(),
+        latencyMs,
+        errorMessage: null,
+        totalRuns: { increment: 1 },
+      },
+      create: {
+        id: 'supabase-keepalive',
+        status: 'OK',
+        lastSource: 'MANUAL',
+        lastRunAt: new Date(),
+        latencyMs,
+        errorMessage: null,
+        totalRuns: 1,
+      },
+    });
+
+    const payload = await collectDatabaseHealthPayload();
+    return res.json({
+      message: `Ping Supabase thành công (${latencyMs}ms)!`,
+      ...payload,
+    });
+  } catch (error: any) {
+    console.error('Lỗi ping thủ công Supabase:', error);
+    return res.status(500).json({
+      status: 'ERROR',
+      error: error?.message || 'Ping tới Supabase PostgreSQL thất bại.',
+    });
+  }
+};

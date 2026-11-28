@@ -42,10 +42,13 @@ import {
   apiDeleteAdminUser,
   apiUpdateAdminUserSubscription,
   apiGetAdminSubscriptionReports,
+  apiGetDatabaseHealth,
+  apiTriggerDatabasePing,
   AdminStats,
   AdminUserItem,
   AdminSubscriptionReports,
   SubscriptionTransactionItem,
+  DatabaseHealthStatus,
 } from '../services/api';
 import { getSupabaseConfig, saveSupabaseConfig, isSupabaseConfigured } from '../services/supabase';
 import { useToast } from './Toast';
@@ -138,6 +141,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   // Audit Logs Data
   const [auditLogs, setAuditLogs] = useState<AuditLogItem[]>([]);
 
+  // Database Health & Keep-Alive Monitor State
+  const [dbHealth, setDbHealth] = useState<DatabaseHealthStatus | null>(null);
+  const [isRefreshingHealth, setIsRefreshingHealth] = useState(false);
+  const [isPingingDb, setIsPingingDb] = useState(false);
+
   useEffect(() => {
     loadAllData();
     const config = getSupabaseConfig();
@@ -148,14 +156,16 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const loadAllData = async () => {
     setIsLoading(true);
     try {
-      const [s, u, rep] = await Promise.all([
+      const [s, u, rep, health] = await Promise.all([
         apiGetAdminStats().catch(() => null),
         apiGetAdminUsers().catch(() => []),
         apiGetAdminSubscriptionReports().catch(() => null),
+        apiGetDatabaseHealth().catch(() => null),
       ]);
       if (s) setStats(s);
       setUsers(u || []);
       if (rep) setRevenueReports(rep);
+      if (health) setDbHealth(health);
 
       // Mock recent security & system events
       setAuditLogs([
@@ -297,6 +307,32 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       toast.error(err.message || 'Lỗi khi cập nhật gói dịch vụ.');
     } finally {
       setIsSubmittingSub(false);
+    }
+  };
+
+  const handleRefreshDbHealth = async () => {
+    setIsRefreshingHealth(true);
+    try {
+      const res = await apiGetDatabaseHealth();
+      setDbHealth(res);
+      toast.success('Đã cập nhật trạng thái sức khỏe Database!');
+    } catch (err: any) {
+      toast.error(err.message || 'Không thể kiểm tra sức khỏe Database');
+    } finally {
+      setIsRefreshingHealth(false);
+    }
+  };
+
+  const handleManualDbPing = async () => {
+    setIsPingingDb(true);
+    try {
+      const res = await apiTriggerDatabasePing();
+      setDbHealth(res);
+      toast.success(res.message || 'Ping Supabase thành công!');
+    } catch (err: any) {
+      toast.error(err.message || 'Ping Supabase thất bại');
+    } finally {
+      setIsPingingDb(false);
     }
   };
 
@@ -884,6 +920,119 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       {/* ================= TAB 2: REPORTS & ANALYTICS (REVENUE & DETAILED CHARTS) ================= */}
       {activeTab === 'REPORTS' && (
         <div className="space-y-5">
+          {/* 0. DATABASE HEALTH & SUPABASE KEEP-ALIVE MONITOR */}
+          <div className="p-5 rounded-2xl bg-slate-900/90 border border-emerald-500/30 shadow-xl backdrop-blur-md">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 flex items-center justify-center shrink-0">
+                  <Database size={20} />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <h4 className="font-bold text-sm text-white">
+                      Sức Khỏe Database &amp; Supabase Keep-Alive
+                    </h4>
+                    <span
+                      className={`inline-flex items-center gap-1.5 text-[11px] font-bold px-2.5 py-0.5 rounded-full border ${
+                        dbHealth?.status === 'HEALTHY'
+                          ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/35'
+                          : dbHealth?.status === 'DEGRADED'
+                          ? 'bg-amber-500/15 text-amber-300 border-amber-500/35'
+                          : 'bg-rose-500/15 text-rose-300 border-rose-500/35'
+                      }`}
+                    >
+                      <span
+                        className={`w-1.5 h-1.5 rounded-full ${
+                          dbHealth?.status === 'HEALTHY'
+                            ? 'bg-emerald-400 animate-pulse'
+                            : dbHealth?.status === 'DEGRADED'
+                            ? 'bg-amber-400'
+                            : 'bg-rose-400'
+                        }`}
+                      />
+                      {dbHealth?.status === 'HEALTHY'
+                        ? 'Healthy • Active'
+                        : dbHealth?.status === 'DEGRADED'
+                        ? 'Cảnh báo'
+                        : dbHealth
+                        ? 'Mất kết nối'
+                        : 'Đang kiểm tra...'}
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-400 mt-0.5">
+                    {dbHealth?.pgVersion || 'Supabase PostgreSQL'} • Cron tự động: <code className="text-emerald-300">{dbHealth?.cronExpression || '0 3 */3 * *'}</code> ({dbHealth?.cronDescription || 'Mỗi 3 ngày lúc 10:00 VN'})
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2 shrink-0">
+                <button
+                  type="button"
+                  onClick={handleRefreshDbHealth}
+                  disabled={isRefreshingHealth || isPingingDb}
+                  className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition-colors disabled:opacity-50"
+                >
+                  <RefreshCw size={14} className={isRefreshingHealth ? 'animate-spin' : ''} />
+                  <span>Kiểm tra lại</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={handleManualDbPing}
+                  disabled={isPingingDb}
+                  className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold bg-emerald-500 hover:bg-emerald-400 text-slate-950 shadow-lg shadow-emerald-500/20 transition-all disabled:opacity-60"
+                >
+                  <Zap size={14} className={isPingingDb ? 'animate-pulse' : ''} />
+                  <span>{isPingingDb ? 'Đang Ping...' : 'Ping Supabase ngay'}</span>
+                </button>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+              <div className="p-3 rounded-xl bg-black/30 border border-white/5">
+                <div className="text-[11px] text-slate-400 font-medium">Độ trễ hiện tại</div>
+                <div className="text-lg font-extrabold text-white mt-0.5">
+                  {dbHealth?.liveLatencyMs !== undefined ? `${dbHealth.liveLatencyMs} ms` : '—'}
+                </div>
+              </div>
+
+              <div className="p-3 rounded-xl bg-black/30 border border-white/5">
+                <div className="text-[11px] text-slate-400 font-medium">Dung lượng Database</div>
+                <div className="text-lg font-extrabold text-white mt-0.5">
+                  {dbHealth?.dbSizeMB !== null && dbHealth?.dbSizeMB !== undefined ? `${dbHealth.dbSizeMB} MB` : '—'}
+                </div>
+              </div>
+
+              <div className="p-3 rounded-xl bg-black/30 border border-white/5">
+                <div className="text-[11px] text-slate-400 font-medium">Tổng số lần Ping</div>
+                <div className="text-lg font-extrabold text-emerald-300 mt-0.5">
+                  {dbHealth?.heartbeat?.totalRuns ?? 0} lần
+                </div>
+              </div>
+
+              <div className="p-3 rounded-xl bg-black/30 border border-white/5">
+                <div className="text-[11px] text-slate-400 font-medium">Ping gần nhất</div>
+                <div className="text-xs font-bold text-slate-200 mt-1 truncate">
+                  {dbHealth?.heartbeat?.lastRunAt
+                    ? new Date(dbHealth.heartbeat.lastRunAt).toLocaleString('vi-VN')
+                    : 'Chưa có lịch sử'}
+                </div>
+                {dbHealth?.heartbeat?.lastSource && (
+                  <div className="text-[10px] text-slate-400 mt-0.5">
+                    Nguồn: {dbHealth.heartbeat.lastSource === 'CRON' ? 'Tự động (Cron)' : 'Thủ công (Admin)'}
+                    {dbHealth.heartbeat.latencyMs !== null ? ` • ${dbHealth.heartbeat.latencyMs}ms` : ''}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {(dbHealth?.heartbeat?.errorMessage || dbHealth?.error) && (
+              <div className="mt-3 p-3 rounded-xl bg-rose-500/10 border border-rose-500/30 text-xs text-rose-300 flex items-center gap-2">
+                <AlertTriangle size={15} className="shrink-0" />
+                <span>Lỗi gần nhất: {dbHealth?.error || dbHealth?.heartbeat?.errorMessage}</span>
+              </div>
+            )}
+          </div>
+
           {/* 1. TOP FINANCIAL & PRO METRICS ROW */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
             <div className="p-4 rounded-2xl bg-gradient-to-br from-emerald-950/70 to-slate-900/90 border border-emerald-500/35 shadow-xl flex items-center justify-between">

@@ -9,6 +9,8 @@ import {
   deleteAdminUser,
   getAdminTrees,
   updateAdminUserSubscription,
+  getAdminDatabaseHealth,
+  triggerAdminDatabasePing,
 } from '../controllers/admin.controller';
 
 const router = Router();
@@ -26,5 +28,7 @@ router.put('/users/:id/subscription', updateAdminUserSubscription);
 router.patch('/users/:id/subscription', updateAdminUserSubscription);
 router.delete('/users/:id', deleteAdminUser);
 router.get('/trees', getAdminTrees);
+router.get('/db-health', getAdminDatabaseHealth);
+router.post('/db-health/ping', triggerAdminDatabasePing);
 
 export default router;

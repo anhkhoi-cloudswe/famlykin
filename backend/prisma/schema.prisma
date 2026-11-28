@@ -125,3 +125,14 @@ model Relationship {
   spouse2Id   String?
   spouse2     Person?     @relation("Spouse2Relations", fields: [spouse2Id], references: [id], onDelete: Cascade)
 }
+
+model SystemHeartbeat {
+  id           String   @id
+  status       String   @default("OK")
+  lastSource   String   @default("CRON")
+  lastRunAt    DateTime @default(now())
+  latencyMs    Int?
+  errorMessage String?
+  totalRuns    Int      @default(0)
+  updatedAt    DateTime @updatedAt
+}

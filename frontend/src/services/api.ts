@@ -430,3 +430,34 @@ export const apiUpdateAdminUserSubscription = (
     method: 'PUT',
     body: JSON.stringify(data),
   });
+
+export interface DatabaseHealthStatus {
+  status: 'HEALTHY' | 'DEGRADED' | 'ERROR';
+  liveLatencyMs?: number;
+  dbSizeBytes?: number | null;
+  dbSizeMB?: number | null;
+  pgVersion?: string | null;
+  cronExpression: string;
+  cronDescription: string;
+  checkedAt: string;
+  error?: string;
+  message?: string;
+  heartbeat?: {
+    id: string;
+    status: string;
+    lastSource: string;
+    lastRunAt: string;
+    latencyMs: number | null;
+    errorMessage: string | null;
+    totalRuns: number;
+    updatedAt: string;
+  } | null;
+}
+
+export const apiGetDatabaseHealth = () =>
+  request<DatabaseHealthStatus>('/admin/db-health');
+
+export const apiTriggerDatabasePing = () =>
+  request<DatabaseHealthStatus>('/admin/db-health/ping', {
+    method: 'POST',
+  });
